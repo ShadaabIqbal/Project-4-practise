@@ -1,11 +1,12 @@
 const urlModel = require('../model/urlModel')
-const shortid = require("shortid")
-const validUrl = require('valid-url')
+// const shortid = require("shortid")
+const validUrl = require('valid-url');
+const { default: axios } = require('axios');
 
 const createUrl = async function (req, res) {
     try {
-        let data = req.body;
-        let { longUrl } = data;
+        let data = req.body
+        let longUrl = req.body.longUrl.toString();
 
         if (Object.keys(data).length == 0) {
             return res.status(400).send({ status: false, message: "Long url is mandatory" });
@@ -17,14 +18,27 @@ const createUrl = async function (req, res) {
             return res.status(400).send({ status: false, message: "Please provide valid Url" });
         }
 
-        let checkUrl = await urlModel.findOne({ longUrl }).select({ longUrl: 1, shortUrl: 1, urlCode: 1 });
+        let correctUrl = false
+        let options = {
+            method: "get",
+            url: longUrl
+        }
+        await axios(options)
+            .then(() => { correctUrl = true })
+            .catch(() => { correctUrl = false })
+        if (correctUrl == false) {
+            return res.status(400).send({ status: false, message: "url not found" })
+        }
+
+        let checkUrl = await urlModel.findOne({ longUrl }).select({ longUrl: 1, shortUrl: 1, urlCode: 1, _id: 0 });
 
         if (checkUrl) {
             return res.status(200).send({ status: false, message: "Url already shorted", data: checkUrl });
         }
 
         let baseUrl = "http://localhost:3000";
-        let urlCode = shortid.generate();
+        // let urlCode = shortid.generate();
+        let urlCode = (Math.random() + 1).toString(36).substring(7) + longUrl.slice(-1)
         let shortUrl = baseUrl + "/" + urlCode;
 
         let obj = { shortUrl: shortUrl, longUrl: longUrl, urlCode: urlCode }
@@ -46,12 +60,8 @@ const getUrl = async function (req, res) {
     try {
         let urlCode = req.params.urlCode
         let urlExist = await urlModel.findOne({ urlCode: urlCode })
-        if (urlExist) {
-            // return res.status(302).redirect(urlExist.longUrl)
-            return res.status(302).send(`Found. Redirecting ${urlExist.longUrl}`)
-        } else {
-            return res.status(400).send({ status: false, msg: "shortUrl is not found" });
-        }
+        if (!urlExist) return res.status(400).send({ status: false, message: "No url found" })
+        return res.status(302).redirect(urlExist.longUrl)
     } catch (error) {
         return res.status(500).send({ status: false, message: error.message })
     }
